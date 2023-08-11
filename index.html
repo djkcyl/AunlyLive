@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>直播播放器</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="assets/css/daisyui@3.5.0-full.css" rel="stylesheet" type="text/css" />
+    <script src="assets/js/tailwindcss-3.3.3.js"></script>
+</head>
+
+<body class="flex sm:justify-center sm:items-center min-h-screen p-0 sm:p-4">
+    <div id="background"
+        style="position: fixed; width: 100%; height: 100%; z-index: -1; background-position: center; background-repeat: no-repeat; background-size: 100%; ">
+    </div>
+    <div id="login_form" class="w-full sm:max-w-md px-6 py-4 bg-gray-100 rounded-lg shadow-md overflow-hidden mx-auto"
+        style="display: none;">
+        <div class="mt-6">
+            <div class="flex justify-center items-center">
+                <svg class="w-16 h-16 fill-current text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none"
+                    viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 14a7 7 0 00-7-7 4 4 0 00-4 4v6a2 2 0 002 2h6a2 2 0 002-2v-1"></path>
+                </svg>
+            </div>
+            <h2 class="text-center text-2xl font-extrabold text-gray-900 mt-4">
+                登录到您的账户
+            </h2>
+            <div class="mt-8">
+                <div class="mb-4">
+                    <label for="username" class="block text-gray-700 text-sm font-bold mb-2">用户名:</label>
+                    <div class="mt-1 relative rounded-md shadow-sm">
+                        <input type="text" id="username"
+                            class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <label for="password" class="block text-gray-700 text-sm font-bold mb-2">密码:</label>
+                    <div class="mt-1 relative rounded-md shadow-sm">
+                        <input type="password" id="password"
+                            class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+                <div class="flex justify-between space-x-4">
+                    <button id="btn_login"
+                        class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">登录</button>
+                    <button id="btn_guest_login"
+                        class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gray-600 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">游客登录</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="error_modal" class="modal">
+        <div class="modal-box bg-red-100">
+            <h2 class="text-xl text-red-600">登录错误</h2>
+            <p class="text-red-500">用户名或密码不匹配</p>
+            <div class="modal-action">
+                <button class="btn btn-error" onclick="closeErrorModal()">知道了</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="main_content" class="w-full sm:max-w-5xl" style="display: none;">
+        <div class="form-inline flex flex-col items-center">
+            <div class="mockup-window border bg-base-300">
+                <div class="form-inline flex flex-col items-center">
+                    <video id="video_player" class="w-full h-auto"></video>
+                    <div id="controls" class="flex items-center my-2 space-x-4" style="visibility: hidden;">
+                        <div class="flex items-center">
+                            <label for="volume_control" class="mr-2 whitespace-nowrap">音量</label>
+                            <input type="range" class="range" id="volume_control" min="0" max="10" value="2">
+                        </div>
+                        <button id="btn_fullscreen" class="btn btn-primary">全屏</button>
+                    </div>
+                </div>
+            </div>
+            <div id="stream_list" class="w-full mt-4 overflow-x-auto" style="display: none;">
+                <table class="table w-full min-w-max">
+                    <thead>
+                        <tr>
+                            <th>流名称</th>
+                            <th>分辨率</th>
+                            <th class="hidden sm:table-cell">码率</th>
+                            <th>在线人数</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stream_list_body">
+                        <!-- Stream list will be generated here -->
+                    </tbody>
+                </table>
+            </div>
+            <div id="no_streams_message" class="w-full text-center text-gray-500 mt-4" style="display: none;">
+                <h3>目前没有可播放的流，请稍后再试。</h3>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="assets/js/jquery-1.12.2.min.js"></script>
+    <script src="assets/js/mpegts-1.7.3.min.js"></script>
+</body>
+
+</html>
+
+<script type="text/javascript">
+    var player = null;
+
+    $(document).ready(function () {
+        closeErrorModal();
+        var access_token = sessionStorage.getItem('access_token');
+        if (access_token) {
+            $('#background').css('background-image', 'none');
+            $("#login_form").hide();
+            $("#main_content").show();
+            updateStreamList();
+            setInterval(updateStreamList, 5000);
+        } else {
+            $("#login_form").show();
+            $("#main_content").hide();
+            var timestamp = new Date().getTime();
+            fetch("http://a60.one:404?bytes=1&" + timestamp)
+                .then(response => response.blob())
+                .then(blob => {
+                    var reader = new FileReader();
+                    reader.onloadend = function () {
+                        var base64data = reader.result;
+                        $('#background').css({
+                            'background-image': `url(${base64data})`,
+                            'filter': 'blur(4px)',
+                        });
+                    }
+                    reader.readAsDataURL(blob);
+                });
+        }
+    });
+
+    function openErrorModal() {
+        $("#error_modal").addClass("modal-open");
+    }
+
+    function closeErrorModal() {
+        $("#error_modal").removeClass("modal-open");
+    }
+
+    function updateStreamList() {
+        var access_token = sessionStorage.getItem('access_token');
+        var headers = {};
+        if (access_token) {
+            headers["Authorization"] = access_token;
+        }
+        $.ajax({
+            url: "http://live.a60.one:88/api/streams/list",
+            method: "GET",
+            headers: headers,
+            success: function (data) {
+                if (data.code === 0) {
+                    var streams = data.streams;
+                    var stream_list_html = "";
+
+                    // 检查流的数量，如果数量为0，则隐藏流列表
+                    if (streams.length === 0) {
+                        $("#stream_list").hide();
+                        $("#no_streams_message").show();
+                        $("#video_player").hide();
+                        return;
+                    } else {
+                        $("#stream_list").show();
+                        $("#no_streams_message").hide();
+                        $("#video_player").show();
+                    }
+
+                    streams.forEach(function (stream, index) {
+                        stream_list_html += `
+                        <tr class="stream-row cursor-pointer hover" onclick="playStream('${stream.play_url}')">
+                            <td class="border px-4 py-2">${stream.name}</td>
+                            <td class="border px-4 py-2">${stream.video.width}x${stream.video.height}</td>
+                            <td class="border px-4 py-2 hidden sm:table-cell">${stream.kbps.recv_30s} kbps (接收) / ${stream.kbps.send_30s} kbps (发送)</td>
+                            <td class="border px-4 py-2">${stream.clients - 1}</td>
+                        </tr>`;
+                    });
+                    $("#stream_list_body").html(stream_list_html);
+                }
+            }
+        });
+    }
+
+    function playStream(stream_url) {
+        if (player) {
+            player.destroy();
+            player = null;
+        }
+
+        player = mpegts.createPlayer({ type: 'flv', url: stream_url, isLive: true, enableStashBuffer: false });
+        player.attachMediaElement(document.getElementById('video_player'));
+        player.load();
+        player.play();
+        var video = document.getElementById('video_player');
+        video.volume = 0.2;
+        document.getElementById('controls').style.visibility = "visible";
+    }
+
+    $("#volume_control").on("input", function () {
+        var video = document.getElementById('video_player');
+        video.volume = $(this).val() / 10;
+    });
+
+    $("#btn_fullscreen").click(function () {
+        var video = document.getElementById('video_player');
+        if (video.requestFullscreen) {
+            video.requestFullscreen();
+        } else if (video.mozRequestFullScreen) { /* Firefox */
+            video.mozRequestFullScreen();
+        } else if (video.webkitRequestFullscreen) { /* Chrome, Safari & Opera */
+            video.webkitRequestFullscreen();
+        } else if (video.msRequestFullscreen) { /* IE/Edge */
+            video.msRequestFullscreen();
+        }
+    });
+
+    $("#btn_login").click(function () {
+        var username = $("#username").val();
+        var password = $("#password").val();
+
+        if (!username) {
+            $("#username").addClass("input-error");
+        }
+
+        if (!password) {
+            $("#password").addClass("input-error");
+        }
+
+        if (username && password) {
+            $.ajax({
+                url: "http://live.a60.one:88/api/auth/token",
+                method: "POST",
+                data: {
+                    grant_type: "password",
+                    username: username,
+                    password: password
+                },
+                success: function (data) {
+                    sessionStorage.setItem('access_token', data.access_token);
+                    $("#login_form").hide();
+                    $("#main_content").show();
+                    updateStreamList();
+                    setInterval(updateStreamList, 5000);
+                    $('#background').css('background-image', 'none');
+                },
+                error: function (jqXHR, textStatus, errorThrown) {
+                    if (jqXHR.status === 401) {
+                        openErrorModal();
+                    } else {
+                        alert("发生了错误：" + textStatus);
+                    }
+                }
+            });
+        }
+    });
+
+    $("#username").on("input", function () {
+        if ($(this).val()) {
+            $(this).removeClass("input-error");
+        } else {
+            $(this).addClass("input-error");
+        }
+    });
+
+    $("#password").on("input", function () {
+        if ($(this).val()) {
+            $(this).removeClass("input-error");
+        } else {
+            $(this).addClass("input-error");
+        }
+    });
+
+    $("#btn_guest_login").click(function () {
+        $("#login_form").hide();
+        $("#main_content").show();
+        updateStreamList();
+        setInterval(updateStreamList, 5000);
+        $('#background').css('background-image', 'none');
+    });
+</script>
